@@ -1,0 +1,39 @@
+#!/bin/sh
+
+if [ -n "$GMAIL_USER" -a -n "$GMAIL_PASSWD" ]; then
+        echo "Setting Gmail's username and password..."
+        echo "[smtp.gmail.com]:587 $GMAIL_USER:$GMAIL_PASSWD" > /etc/postfix/sasl_passwd
+        postmap /etc/postfix/sasl_passwd
+else
+        echo "WARNING! No GMAIL_USER or GMAIL_PASSWD specified."
+fi
+
+sysconf_setvar() {
+        fname="$1"
+        shift 1
+        while [ -n "$1" -a -n "$2" ]; do
+                vname="$1"
+                value="$2"
+                sed -i "s/^\(${vname}\)=.*$/\1=\"${value}\"/" "${fname}"
+                shift 2
+        done
+}
+
+sysconf_setvar /etc/sysconfig/mail \
+        SMTPD_LISTEN_REMOTE yes
+
+sysconf_setvar /etc/sysconfig/postfix \
+        POSTFIX_RELAYHOST "[smtp.gmail.com]:587"
+
+/etc/postfix/system/config_postfix
+
+postconf -ev \
+        "smtp_use_tls = yes" \
+        "smtp_sasl_auth_enable = yes" \
+        "smtp_sasl_security_options =" \
+        "smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd" \
+        "smtp_tls_CAfile = /etc/ssl/ca-bundle.pem" \
+
+echo 'tlsmgr unix - - n 1000? 1 tlsmgr' >> /etc/postfix/master.cf
+
+exec /start-postfix
